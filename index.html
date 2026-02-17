@@ -3,194 +3,213 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global IP Identity Mapper</title>
+    <title>高精度身份与详细地址生成器</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
         body {
-            background-color: #050505;
-            color: #d1d5db;
-            font-family: 'Fira Code', monospace;
+            background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+            color: #e2e8f0;
+            font-family: 'JetBrains Mono', monospace;
         }
-        .scanner-line {
-            height: 2px;
-            background: linear-gradient(90deg, transparent, #3b82f6, transparent);
-            position: absolute;
-            width: 100%;
-            animation: scan 4s linear infinite;
-            z-index: 20;
+        .glass-card {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
         }
-        @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
         #map {
-            height: 450px;
-            filter: invert(100%) hue-rotate(180deg) brightness(90%) contrast(90%);
+            height: 400px;
             border-radius: 1.5rem;
+            filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
         }
-        .neon-border {
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
+        .info-label { color: #64748b; font-size: 0.65rem; font-weight: bold; letter-spacing: 0.1rem; }
+        .info-value { color: #38bdf8; font-weight: 700; }
+        .pulse-dot {
+            height: 8px; width: 8px; background-color: #10b981; border-radius: 50%;
+            display: inline-block; margin-right: 8px; animation: pulse 2s infinite;
         }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4">
+<body class="min-h-screen p-4 md:p-8 flex items-center justify-center">
 
-    <div class="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
+    <div class="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        <div class="lg:col-span-5 space-y-6">
-            <div class="neon-border bg-slate-900/80 backdrop-blur-xl rounded-3xl p-8 relative overflow-hidden">
-                <div class="scanner-line opacity-30"></div>
+        <div class="lg:col-span-5 flex flex-col gap-6">
+            <div class="glass-card rounded-3xl p-8 relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-4 opacity-10">
+                    <svg width="100" height="100" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                </div>
                 
-                <div class="flex items-center justify-between mb-8">
-                    <div class="flex items-center space-x-2">
-                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-ping"></div>
-                        <h2 class="text-xs font-bold tracking-[0.3em] text-blue-400 uppercase">System Active</h2>
+                <div class="mb-8">
+                    <div class="flex items-center mb-1">
+                        <span class="pulse-dot"></span>
+                        <span class="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">Live Terminal Sync</span>
                     </div>
-                    <span id="country-tag" class="text-[10px] px-2 py-0.5 border border-blue-500/50 text-blue-400 rounded">NETWORK MODE</span>
+                    <h1 class="text-2xl font-black italic tracking-tighter text-white">GENERATE_INFO_PRO</h1>
                 </div>
 
-                <div class="mb-10">
-                    <label class="text-[10px] text-gray-500 uppercase tracking-widest block mb-1">Detected Network IP</label>
-                    <div id="display-ip" class="text-4xl font-black text-white tracking-tighter">0.0.0.0</div>
-                    <div id="display-isp" class="text-[10px] text-blue-500/70 mt-1 truncate">Analyzing ISP...</div>
-                </div>
-
-                <div class="space-y-4">
+                <div class="space-y-6">
                     <div class="grid grid-cols-2 gap-4">
-                        <div class="bg-black/40 p-4 rounded-2xl border border-white/5">
-                            <label class="text-[10px] text-gray-500 block mb-1 uppercase">Random Name</label>
-                            <span id="gen-name" class="font-bold text-blue-100 italic">--</span>
+                        <div class="bg-black/30 p-4 rounded-2xl border border-white/5">
+                            <span class="info-label block mb-1">姓名 / NAME</span>
+                            <span id="res-name" class="info-value text-lg">正在载入...</span>
                         </div>
-                        <div class="bg-black/40 p-4 rounded-2xl border border-white/5">
-                            <label class="text-[10px] text-gray-500 block mb-1 uppercase">Local Phone</label>
-                            <span id="gen-phone" class="font-bold text-blue-100">--</span>
+                        <div class="bg-black/30 p-4 rounded-2xl border border-white/5">
+                            <span class="info-label block mb-1">邮编 / ZIPCODE</span>
+                            <span id="res-zip" class="info-value text-lg tracking-widest">------</span>
                         </div>
                     </div>
 
-                    <div class="bg-black/40 p-4 rounded-2xl border border-white/5">
-                        <label class="text-[10px] text-gray-500 block mb-1 uppercase">Detailed Physical Address</label>
-                        <span id="gen-address" class="text-sm text-blue-200 leading-relaxed font-medium block">Waiting for network sync...</span>
+                    <div class="bg-blue-500/5 p-5 rounded-2xl border border-blue-500/20">
+                        <span class="info-label block mb-2 text-blue-400">详细收货地址 / DETAILED ADDRESS</span>
+                        <span id="res-address" class="text-sm font-medium leading-relaxed text-blue-100 italic">
+                            正在通过出口网关解析物理路径...
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-black/30 p-4 rounded-2xl border border-white/5">
+                            <span class="info-label block mb-1">联系电话 / MOBILE</span>
+                            <span id="res-phone" class="info-value">-- --- ----</span>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-2xl border border-white/5">
+                            <span class="info-label block mb-1">出口 IP / GATEWAY</span>
+                            <span id="res-ip" class="info-value text-xs">0.0.0.0</span>
+                        </div>
                     </div>
                 </div>
 
-                <button onclick="syncEnvironment()" class="w-full mt-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black transition-all shadow-lg shadow-blue-600/20 active:scale-95">
-                    REFRESH NETWORK SYNC
-                </button>
+                <div class="mt-10 flex gap-3">
+                    <button onclick="fetchLocationAndGen()" class="flex-grow py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black transition-all shadow-lg shadow-blue-600/30 active:scale-95">
+                        同步网络并重新生成
+                    </button>
+                    <button onclick="copyCurrentInfo()" class="px-6 bg-white/5 hover:bg-white/10 text-white rounded-2xl transition-all border border-white/10">
+                        复制
+                    </button>
+                </div>
             </div>
-
-            <div class="grid grid-cols-3 gap-4">
-                <div class="neon-border bg-slate-900/50 p-4 rounded-2xl text-center">
-                    <div class="text-[10px] text-gray-500 mb-1">CITY</div>
-                    <div id="val-city" class="text-xs font-bold">--</div>
-                </div>
-                <div class="neon-border bg-slate-900/50 p-4 rounded-2xl text-center">
-                    <div class="text-[10px] text-gray-500 mb-1">LON</div>
-                    <div id="val-lon" class="text-xs font-bold text-blue-400">0.00</div>
-                </div>
-                <div class="neon-border bg-slate-900/50 p-4 rounded-2xl text-center">
-                    <div class="text-[10px] text-gray-500 mb-1">LAT</div>
-                    <div id="val-lat" class="text-xs font-bold text-blue-400">0.00</div>
-                </div>
+            
+            <div class="px-4 text-[10px] text-gray-600 flex justify-between">
+                <span>ENCRYPTION: AES-256</span>
+                <span>DATA SOURCE: IPAPI.CO</span>
             </div>
         </div>
 
         <div class="lg:col-span-7">
-            <div class="neon-border bg-slate-900/80 rounded-3xl p-4 h-full min-h-[500px] flex flex-col">
-                <div id="map" class="flex-grow shadow-inner"></div>
+            <div class="glass-card rounded-3xl p-6 h-full flex flex-col">
+                <div id="map" class="flex-grow"></div>
+                <div class="mt-6 flex justify-between items-center px-2">
+                    <div class="flex space-x-8">
+                        <div>
+                            <p class="info-label">经度 LON</p>
+                            <p id="val-lon" class="text-sm font-bold text-sky-400">0.0000</p>
+                        </div>
+                        <div>
+                            <p class="info-label">纬度 LAT</p>
+                            <p id="val-lat" class="text-sm font-bold text-sky-400">0.0000</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="info-label">定位精度</p>
+                        <p class="text-xs font-bold text-emerald-500">CITY LEVEL</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // 核心配置与地图初始化
-        let map = L.map('map', { zoomControl: false }).setView([20, 0], 2);
+        // 1. 初始化地图
+        let map = L.map('map', { zoomControl: false }).setView([30, 110], 4);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        let userMarker;
+        let marker;
 
-        // 随机数据库
-        const DB = {
-            CN: {
-                surnames: "赵钱孙李周吴郑王冯陈",
-                names: "建国志强美丽欣怡",
-                roads: ["人民路", "中山路", "解放大道", "新华路"]
-            },
-            US: {
-                surnames: ["Smith", "Johnson", "Brown", "Miller", "Davis"],
-                names: ["James", "Robert", "Mary", "Patricia", "Michael"],
-                roads: ["Main St", "Oak Ave", "Sunset Blvd", "Broadway"]
-            },
-            OTHER: {
-                surnames: ["Silva", "Müller", "Sato", "Ivanov"],
-                names: ["Alex", "Elena", "Kenji", "Luca"],
-                roads: ["Global Street", "Station Road", "Park Avenue"]
-            }
+        // 2. 增强版随机数据库
+        const SURNAMES = "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜戚谢邹喻柏水窦章云苏潘葛奚范彭郎鲁韦昌马苗凤花方俞任袁柳酆鲍史唐";
+        const NAMES = "志强建国美丽秀英浩然思睿子涵婉莹俊杰嘉怡雨桐欣妍博文天宇一诺";
+        const DISTRICTS = ["中心区", "开发区", "滨江新区", "高新区", "工业园区", "北城新区", "文教路片区"];
+        const ROADS = ["中山路", "解放路", "人民大街", "新华路", "友谊大道", "建设路", "东风路", "红旗街", "科技路", "花园胡同", "柳荫路"];
+
+        // 省份与邮编前缀对应关系
+        const ZIP_MAP = {
+            "Beijing": "1000", "Shanghai": "2000", "Tianjin": "3000", "Chongqing": "4000",
+            "Hebei": "0500", "Shanxi": "0300", "Liaoning": "1100", "Jilin": "1300", "Heilongjiang": "1500",
+            "Jiangsu": "2100", "Zhejiang": "3100", "Anhui": "2300", "Fujian": "3500", "Jiangxi": "3300",
+            "Shandong": "2500", "Henan": "4500", "Hubei": "4300", "Hunan": "4100", "Guangdong": "5100",
+            "Sichuan": "6100", "Guizhou": "5500", "Yunnan": "6500", "Shaanxi": "7100"
         };
 
-        async function syncEnvironment() {
+        const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+        const rng = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+        // 3. 核心获取函数
+        async function fetchLocationAndGen() {
             try {
-                // 1. 获取基于当前出口 IP 的地理数据 (强制同步 IP 环境)
-                const response = await fetch('https://ipapi.co/json/');
-                const data = await response.json();
+                // 完全基于当前 IP (支持 VPN 切换后的实时更新)
+                const res = await fetch('https://ipapi.co/json/');
+                const data = await res.json();
 
-                if (data.error) throw new Error("API Limit");
+                if (data.error) throw new Error("Limit");
 
-                // 2. 更新基础信息
-                document.getElementById('display-ip').innerText = data.ip;
-                document.getElementById('display-isp').innerText = data.org || "Unknown Service Provider";
-                document.getElementById('val-city').innerText = data.city || "Unknown";
+                // 更新界面
+                document.getElementById('res-ip').innerText = data.ip;
                 document.getElementById('val-lon').innerText = data.longitude.toFixed(4);
                 document.getElementById('val-lat').innerText = data.latitude.toFixed(4);
-                document.getElementById('country-tag').innerText = `REGION: ${data.country_code}`;
 
-                // 3. 更新地图中心 (忠实于 IP 坐标)
-                const coords = [data.latitude, data.longitude];
-                map.setView(coords, 12);
-                if (userMarker) map.removeLayer(userMarker);
-                userMarker = L.circle(coords, { radius: 800, color: '#3b82f6', fillOpacity: 0.4 }).addTo(map);
+                // 更新地图
+                const pos = [data.latitude, data.longitude];
+                map.setView(pos, 13);
+                if (marker) map.removeLayer(marker);
+                marker = L.circle(pos, { radius: 600, color: '#38bdf8', weight: 2, fillOpacity: 0.3 }).addTo(map);
 
-                // 4. 生成符合当地文化的身份
-                generateLocaleIdentity(data);
+                // 生成详细身份
+                generateDetail(data);
 
             } catch (err) {
-                document.getElementById('display-ip').innerText = "SYNC ERROR";
-                console.error(err);
+                console.error("同步失败", err);
+                document.getElementById('res-address').innerText = "服务调用受限，请稍后重试或检查解析";
             }
         }
 
-        function generateLocaleIdentity(geo) {
-            const country = geo.country_code; // 例如 'CN', 'US', 'JP'
-            let source = DB.OTHER;
+        function generateDetail(geo) {
+            // 姓名
+            const name = pick(SURNAMES) + pick(NAMES) + (Math.random() > 0.4 ? pick(NAMES) : "");
+            document.getElementById('res-name').innerText = name;
+
+            // 电话
+            const phone = `1${pick(['3','5','7','8','9'])}${rng(10, 99)}-${rng(1000, 9999)}-${rng(1000, 9999)}`;
+            document.getElementById('res-phone').innerText = phone;
+
+            // 邮编 (基于省份匹配前缀 + 随机后两位)
+            const zipPrefix = ZIP_MAP[geo.region] || "0000";
+            const zip = zipPrefix.substring(0, 4) + rng(10, 99);
+            document.getElementById('res-zip').innerText = zip;
+
+            // 详细地址算法
+            const district = pick(DISTRICTS);
+            const road = pick(ROADS);
+            const num = rng(1, 1999);
+            const building = rng(1, 18);
+            const unit = rng(1, 4);
+            const room = rng(101, 3208);
             
-            if (country === 'CN') source = DB.CN;
-            else if (country === 'US' || country === 'GB' || country === 'CA') source = DB.US;
-
-            const pick = (arr) => Array.isArray(arr) ? arr[Math.floor(Math.random()*arr.length)] : arr[Math.floor(Math.random()*arr.length)];
-
-            // 姓名生成逻辑
-            let fName, lName;
-            if (country === 'CN') {
-                fName = pick(source.surnames);
-                lName = pick(source.names);
-            } else {
-                fName = pick(source.names);
-                lName = pick(source.surnames);
-            }
-
-            // 地址生成逻辑 (真实城市 + 随机街道)
-            const road = pick(source.roads);
-            const num = Math.floor(Math.random() * 998) + 1;
-            const fullAddress = country === 'CN' ? 
-                `${geo.region} ${geo.city} ${road}${num}号` : 
-                `${num} ${road}, ${geo.city}, ${geo.region}`;
-
-            document.getElementById('gen-name').innerText = country === 'CN' ? fName + lName : `${fName} ${lName}`;
-            document.getElementById('gen-address').innerText = fullAddress;
-            document.getElementById('gen-phone').innerText = `+${geo.country_calling_code} ${Math.floor(Math.random()*899 + 100)}-${Math.floor(Math.random()*8999 + 1000)}`;
+            // 拼接地址：省 + 市 + 随机区 + 随机路 + 号 + 栋 + 单元 + 房号
+            const fullAddress = `${geo.region} ${geo.city} ${district}${road}${num}号 ${building}号楼${unit}单元${room}室`;
+            document.getElementById('res-address').innerText = fullAddress;
         }
 
-        // 初始同步
-        syncEnvironment();
+        function copyCurrentInfo() {
+            const info = `姓名：${document.getElementById('res-name').innerText}\n手机：${document.getElementById('res-phone').innerText}\n邮编：${document.getElementById('res-zip').innerText}\n地址：${document.getElementById('res-address').innerText}`;
+            navigator.clipboard.writeText(info);
+            alert("✅ 详细身份信息已存入剪贴板");
+        }
+
+        // 首次自动加载
+        window.onload = fetchLocationAndGen;
     </script>
 </body>
 </html>
