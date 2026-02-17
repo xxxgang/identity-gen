@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global IP Identity Mapper</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap');
+        body {
+            background-color: #050505;
+            color: #d1d5db;
+            font-family: 'Fira Code', monospace;
+        }
+        .scanner-line {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+            position: absolute;
+            width: 100%;
+            animation: scan 4s linear infinite;
+            z-index: 20;
+        }
+        @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+        #map {
+            height: 450px;
+            filter: invert(100%) hue-rotate(180deg) brightness(90%) contrast(90%);
+            border-radius: 1.5rem;
+        }
+        .neon-border {
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div class="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
+        
+        <div class="lg:col-span-5 space-y-6">
+            <div class="neon-border bg-slate-900/80 backdrop-blur-xl rounded-3xl p-8 relative overflow-hidden">
+                <div class="scanner-line opacity-30"></div>
+                
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-ping"></div>
+                        <h2 class="text-xs font-bold tracking-[0.3em] text-blue-400 uppercase">System Active</h2>
+                    </div>
+                    <span id="country-tag" class="text-[10px] px-2 py-0.5 border border-blue-500/50 text-blue-400 rounded">NETWORK MODE</span>
+                </div>
+
+                <div class="mb-10">
+                    <label class="text-[10px] text-gray-500 uppercase tracking-widest block mb-1">Detected Network IP</label>
+                    <div id="display-ip" class="text-4xl font-black text-white tracking-tighter">0.0.0.0</div>
+                    <div id="display-isp" class="text-[10px] text-blue-500/70 mt-1 truncate">Analyzing ISP...</div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-black/40 p-4 rounded-2xl border border-white/5">
+                            <label class="text-[10px] text-gray-500 block mb-1 uppercase">Random Name</label>
+                            <span id="gen-name" class="font-bold text-blue-100 italic">--</span>
+                        </div>
+                        <div class="bg-black/40 p-4 rounded-2xl border border-white/5">
+                            <label class="text-[10px] text-gray-500 block mb-1 uppercase">Local Phone</label>
+                            <span id="gen-phone" class="font-bold text-blue-100">--</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-black/40 p-4 rounded-2xl border border-white/5">
+                        <label class="text-[10px] text-gray-500 block mb-1 uppercase">Detailed Physical Address</label>
+                        <span id="gen-address" class="text-sm text-blue-200 leading-relaxed font-medium block">Waiting for network sync...</span>
+                    </div>
+                </div>
+
+                <button onclick="syncEnvironment()" class="w-full mt-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black transition-all shadow-lg shadow-blue-600/20 active:scale-95">
+                    REFRESH NETWORK SYNC
+                </button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <div class="neon-border bg-slate-900/50 p-4 rounded-2xl text-center">
+                    <div class="text-[10px] text-gray-500 mb-1">CITY</div>
+                    <div id="val-city" class="text-xs font-bold">--</div>
+                </div>
+                <div class="neon-border bg-slate-900/50 p-4 rounded-2xl text-center">
+                    <div class="text-[10px] text-gray-500 mb-1">LON</div>
+                    <div id="val-lon" class="text-xs font-bold text-blue-400">0.00</div>
+                </div>
+                <div class="neon-border bg-slate-900/50 p-4 rounded-2xl text-center">
+                    <div class="text-[10px] text-gray-500 mb-1">LAT</div>
+                    <div id="val-lat" class="text-xs font-bold text-blue-400">0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-7">
+            <div class="neon-border bg-slate-900/80 rounded-3xl p-4 h-full min-h-[500px] flex flex-col">
+                <div id="map" class="flex-grow shadow-inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // 核心配置与地图初始化
+        let map = L.map('map', { zoomControl: false }).setView([20, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        let userMarker;
+
+        // 随机数据库
+        const DB = {
+            CN: {
+                surnames: "赵钱孙李周吴郑王冯陈",
+                names: "建国志强美丽欣怡",
+                roads: ["人民路", "中山路", "解放大道", "新华路"]
+            },
+            US: {
+                surnames: ["Smith", "Johnson", "Brown", "Miller", "Davis"],
+                names: ["James", "Robert", "Mary", "Patricia", "Michael"],
+                roads: ["Main St", "Oak Ave", "Sunset Blvd", "Broadway"]
+            },
+            OTHER: {
+                surnames: ["Silva", "Müller", "Sato", "Ivanov"],
+                names: ["Alex", "Elena", "Kenji", "Luca"],
+                roads: ["Global Street", "Station Road", "Park Avenue"]
+            }
+        };
+
+        async function syncEnvironment() {
+            try {
+                // 1. 获取基于当前出口 IP 的地理数据 (强制同步 IP 环境)
+                const response = await fetch('https://ipapi.co/json/');
+                const data = await response.json();
+
+                if (data.error) throw new Error("API Limit");
+
+                // 2. 更新基础信息
+                document.getElementById('display-ip').innerText = data.ip;
+                document.getElementById('display-isp').innerText = data.org || "Unknown Service Provider";
+                document.getElementById('val-city').innerText = data.city || "Unknown";
+                document.getElementById('val-lon').innerText = data.longitude.toFixed(4);
+                document.getElementById('val-lat').innerText = data.latitude.toFixed(4);
+                document.getElementById('country-tag').innerText = `REGION: ${data.country_code}`;
+
+                // 3. 更新地图中心 (忠实于 IP 坐标)
+                const coords = [data.latitude, data.longitude];
+                map.setView(coords, 12);
+                if (userMarker) map.removeLayer(userMarker);
+                userMarker = L.circle(coords, { radius: 800, color: '#3b82f6', fillOpacity: 0.4 }).addTo(map);
+
+                // 4. 生成符合当地文化的身份
+                generateLocaleIdentity(data);
+
+            } catch (err) {
+                document.getElementById('display-ip').innerText = "SYNC ERROR";
+                console.error(err);
+            }
+        }
+
+        function generateLocaleIdentity(geo) {
+            const country = geo.country_code; // 例如 'CN', 'US', 'JP'
+            let source = DB.OTHER;
+            
+            if (country === 'CN') source = DB.CN;
+            else if (country === 'US' || country === 'GB' || country === 'CA') source = DB.US;
+
+            const pick = (arr) => Array.isArray(arr) ? arr[Math.floor(Math.random()*arr.length)] : arr[Math.floor(Math.random()*arr.length)];
+
+            // 姓名生成逻辑
+            let fName, lName;
+            if (country === 'CN') {
+                fName = pick(source.surnames);
+                lName = pick(source.names);
+            } else {
+                fName = pick(source.names);
+                lName = pick(source.surnames);
+            }
+
+            // 地址生成逻辑 (真实城市 + 随机街道)
+            const road = pick(source.roads);
+            const num = Math.floor(Math.random() * 998) + 1;
+            const fullAddress = country === 'CN' ? 
+                `${geo.region} ${geo.city} ${road}${num}号` : 
+                `${num} ${road}, ${geo.city}, ${geo.region}`;
+
+            document.getElementById('gen-name').innerText = country === 'CN' ? fName + lName : `${fName} ${lName}`;
+            document.getElementById('gen-address').innerText = fullAddress;
+            document.getElementById('gen-phone').innerText = `+${geo.country_calling_code} ${Math.floor(Math.random()*899 + 100)}-${Math.floor(Math.random()*8999 + 1000)}`;
+        }
+
+        // 初始同步
+        syncEnvironment();
+    </script>
+</body>
+</html>
